@@ -1,0 +1,138 @@
+import os
+import time
+import pandas as pd
+import numpy as np
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich import box
+from rich.prompt import Prompt
+
+console = Console()
+
+def read_file(filepath):
+    """Read CSV or Excel file into a pandas DataFrame."""
+    if not os.path.isfile(filepath):
+        console.print(f"[bold red]File not found or is not a file: {filepath}[/bold red]")
+        raise FileNotFoundError(filepath)
+    if not (filepath.lower().endswith('.csv') or filepath.lower().endswith('.xlsx')):
+        console.print(f"[bold red]Unsupported file format: {filepath}[/bold red]")
+        raise ValueError("Only .csv or .xlsx files are supported")
+    start = time.time()
+    if filepath.lower().endswith('.csv'):
+        df = pd.read_csv(filepath)
+    else:
+        df = pd.read_excel(filepath)
+    elapsed = time.time() - start
+
+    # Safe size fetch, fallback if error
+    try:
+        size_kb = os.path.getsize(filepath) / 1024
+    except Exception:
+        size_kb = -1  # Unknown size
+    return df, elapsed, size_kb
+
+def safe_filename(filepath):
+    base = os.path.basename(filepath)
+    if not base:
+        return "unknown_file"
+    name, ext = os.path.splitext(base)
+    if not name:
+        return "unknown_file"
+    return name
+
+def ai_column_mapping(src_cols, tgt_cols, threshold=0.7):
+    """Generate mappings of source columns to target columns using semantic similarity embeddings."""
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    src_emb = model.encode([str(col) for col in src_cols])
+    tgt_emb = model.encode([str(col) for col in tgt_cols])
+    sim_matrix = cosine_similarity(src_emb, tgt_emb)
+    
+    mapping = {}
+    scores = {}
+    mapped_target_indices = set()
+    for i, src_col in enumerate(src_cols):
+        best_idx = np.argmax(sim_matrix[i])
+        best_score = sim_matrix[i, best_idx]
+        if best_score >= threshold and best_idx not in mapped_target_indices:
+            mapped_target_indices.add(best_idx)
+            mapping[src_col] = tgt_cols[best_idx]
+            scores[src_col] = best_score
+    return mapping, scores
+
+def print_mapping_table(mapping, scores):
+    table = Table(title="AI Column Mapping (Source -> Target)", box=box.ROUNDED)
+    table.add_column("Source Column", style="cyan", no_wrap=True)
+    table.add_column("Target Column", style="green", no_wrap=True)
+    table.add_column("Similarity Score", style="magenta", justify="right")
+    for src_col, tgt_col in mapping.items():
+        table.add_row(src_col, tgt_col, f"{scores[src_col]:.2f}")
+    console.print(Panel(table, title="Column Mapping Summary", style="bold blue"))
+
+def compare_dataframes(src_df, tgt_df, mapping, src_file, tgt_file):
+    src_cols = list(mapping.keys())
+    tgt_cols_mapped = [mapping[col] for col in src_cols]
+    
+    src_aligned = src_df[src_cols].copy()
+    tgt_aligned = tgt_df[tgt_cols_mapped].copy()
+    tgt_aligned.columns = src_cols  # Rename target columns to source cols
+    
+    src_sorted = src_aligned.sort_values(by=src_cols).reset_index(drop=True)
+    tgt_sorted = tgt_aligned.sort_values(by=src_cols).reset_index(drop=True)
+    
+    merged = src_sorted.merge(tgt_sorted, how='outer', indicator=True)
+    
+    only_in_source = merged[merged['_merge'] == 'left_only'].drop(columns=['_merge'])
+    only_in_target = merged[merged['_merge'] == 'right_only'].drop(columns=['_merge'])
+    
+    only_source_file = f"{safe_filename(src_file)}_only_in_source.csv"
+    only_target_file = f"{safe_filename(tgt_file)}_only_in_target.csv"
+    
+    only_in_source.to_csv(only_source_file, index=False)
+    only_in_target.to_csv(only_target_file, index=False)
+    
+    summary_table = Table(title="Comparison Summary", box=box.ASCII)
+    summary_table.add_column("Category", style="yellow")
+    summary_table.add_column("Count", style="magenta", justify="right")
+    summary_table.add_row("Source Rows (Aligned)", str(len(src_sorted)))
+    summary_table.add_row("Target Rows (Aligned)", str(len(tgt_sorted)))
+    summary_table.add_row("Rows only in Source", str(len(only_in_source)))
+    summary_table.add_row("Rows only in Target", str(len(only_in_target)))
+
+    console.print(Panel(summary_table, title="Data Comparison Report", style="bold green"))
+    
+    console.print(f"[bold green]Rows only in source saved to '{only_source_file}'[/bold green]")
+    console.print(f"[bold red]Rows only in target saved to '{only_target_file}'[/bold red]")
+
+def main():
+    console.print("[bold blue]Welcome to AI-Powered Dataframe Column Mapper & Comparator[/bold blue]\n")
+    
+    src_path = Prompt.ask("Enter source data file path (.csv or .xlsx)")
+    tgt_path = Prompt.ask("Enter target data file path (.csv or .xlsx)")
+    
+    try:
+        src_df, src_time, src_size = read_file(src_path)
+        tgt_df, tgt_time, tgt_size = read_file(tgt_path)
+    except Exception as e:
+        console.print(f"[bold red]Error reading files: {e}[/bold red]")
+        return
+    
+    console.print(f"\nSource file rows: {len(src_df)}, columns: {len(src_df.columns)} (Read time: {src_time:.2f}s, Size: {src_size:.2f} KB)")
+    console.print(f"Target file rows: {len(tgt_df)}, columns: {len(tgt_df.columns)} (Read time: {tgt_time:.2f}s, Size: {tgt_size:.2f} KB)")
+    
+    console.print("\n[bold yellow]Performing AI-powered automatic column mapping...[/bold yellow]")
+    mapping, scores = ai_column_mapping(src_df.columns, tgt_df.columns)
+    
+    if not mapping:
+        console.print("[bold red]No column mappings found with the current similarity threshold (0.7). Try lowering the threshold in the code.[/bold red]")
+        return
+    
+    print_mapping_table(mapping, scores)
+    
+    console.print("\n[bold yellow]Comparing data based on mapped columns...[/bold yellow]")
+    compare_dataframes(src_df, tgt_df, mapping, src_path, tgt_path)
+
+if __name__ == "__main__":
+    main()
