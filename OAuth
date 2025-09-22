@@ -1,0 +1,20 @@
+@echo off
+REM User credentials - replace with your secure global variables or plaintext for now
+set ANAPLAN_USER=your.email@example.com
+set ANAPLAN_PASS=yourPassword
+set FLOW_ID=your_flow_id_here
+
+REM Encode username:password in base64 using PowerShell and set to variable
+for /f "delims=" %%i in ('powershell -NoProfile -Command "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('%ANAPLAN_USER%:%ANAPLAN_PASS%'))"') do set BASIC_AUTH=%%i
+
+REM Get OAuth Bearer token from Anaplan Auth endpoint
+for /f "delims=" %%j in ('powershell -NoProfile -Command "Invoke-RestMethod -Uri https://auth.anaplan.com/token/authenticate -Method Post -Headers @{Authorization='Basic %BASIC_AUTH%'; 'Content-Type'='application/json'} | Select-Object -ExpandProperty tokenInfo | Select-Object -ExpandProperty tokenValue"') do set BEARER_TOKEN=%%j
+
+echo Bearer Token acquired successfully.
+
+REM Run CloudWorks flow using the OAuth Bearer token
+curl -X POST "https://api.anaplan.com/cloudworks/v2/integrationFlows/%FLOW_ID%/executions" ^
+  -H "Authorization: Bearer %BEARER_TOKEN%" ^
+  -H "Content-Type: application/json"
+
+pause
