@@ -1,0 +1,26 @@
+#!/bin/bash
+
+# User credentials - replace with environment variables or plaintext for now
+ANAPLAN_USER="your.email@example.com"
+ANAPLAN_PASS="yourPassword"
+FLOW_ID="your_flow_id_here"
+
+# Encode username:password in base64
+BASIC_AUTH=$(echo -n "$ANAPLAN_USER:$ANAPLAN_PASS" | base64)
+
+# Get OAuth Bearer token from Anaplan Auth endpoint
+BEARER_TOKEN=$(curl -s -X POST "https://auth.anaplan.com/token/authenticate" \
+  -H "Authorization: Basic $BASIC_AUTH" \
+  -H "Content-Type: application/json" | jq -r '.tokenInfo.tokenValue')
+
+if [ -z "$BEARER_TOKEN" ] || [ "$BEARER_TOKEN" == "null" ]; then
+  echo "Failed to acquire Bearer token."
+  exit 1
+fi
+
+echo "Bearer Token acquired successfully."
+
+# Run CloudWorks flow using the OAuth Bearer token
+curl -X POST "https://api.anaplan.com/cloudworks/v2/integrationFlows/$FLOW_ID/executions" \
+  -H "Authorization: Bearer $BEARER_TOKEN" \
+  -H "Content-Type: application/json"
