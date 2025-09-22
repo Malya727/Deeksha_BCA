@@ -1,0 +1,40 @@
+import requests
+import base64
+
+# --- USER SETTINGS ---
+USERNAME = "your.email@anaplan.com"  # Your Anaplan user email
+PASSWORD = "your_password"           # Your Anaplan password
+INTEGRATION_FLOW_ID = "your_integration_flow_id"  # Replace with your flow ID
+
+# --- API ENDPOINTS ---
+AUTH_URL = "https://auth.anaplan.com/token/authenticate"
+RUN_FLOW_URL = f"https://api.cloudworks.anaplan.com/2/0/integrations/{INTEGRATION_FLOW_ID}/run"
+
+def authenticate(username, password):
+    auth_string = f"{username}:{password}"
+    encoded_auth = base64.b64encode(auth_string.encode()).decode()
+    headers = {
+        "Authorization": f"Basic {encoded_auth}",
+        "Content-Type": "application/json"
+    }
+    response = requests.post(AUTH_URL, headers=headers)
+    if response.status_code == 201:
+        return response.json()["tokenInfo"]["tokenValue"]
+    else:
+        raise Exception(f"Authentication failed: {response.text}")
+
+def trigger_flow(token):
+    headers = {
+        "Authorization": f"AnaplanAuthToken {token}",
+        "Content-Type": "application/json"
+    }
+    response = requests.post(RUN_FLOW_URL, headers=headers)
+    if response.status_code == 200 or response.status_code == 202:
+        print("Integration flow triggered successfully!")
+        print(response.json())
+    else:
+        print(f"Failed to trigger integration flow: {response.text}")
+
+if __name__ == "__main__":
+    token = authenticate(USERNAME, PASSWORD)
+    trigger_flow(token)
