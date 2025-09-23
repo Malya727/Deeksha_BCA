@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# === CONFIGURATION VARIABLES ===
+KeyStorePath="/path/to/your_cert.pem"      # Public certificate
+KeyFile="/path/to/your_private_key.key"    # Private key
+FlowId="your_flow_id_here"
+
+# === AUTHENTICATE WITH ANAPLAN ===
+auth_response=$(curl -s -X POST "https://auth.anaplan.com/token/authenticate" \
+  --cert "$KeyStorePath" \
+  --key "$KeyFile" \
+  -H "Content-Type: application/json")
+
+# === PARSE TOKEN ===
+bearer_token=$(echo "$auth_response" | grep -oP '(?<="tokenValue":")[^"]+')
+
+if [ -z "$bearer_token" ]; then
+  echo "Failed to obtain bearer token"
+  echo "$auth_response"
+  exit 1
+fi
+
+echo "Token acquired."
+
+# === TRIGGER CLOUDWORKS FLOW ===
+trigger_response=$(curl -s -X POST "https://api.anaplan.com/cloudworks/v2/integrationFlows/$FlowId/executions" \
+  -H "Authorization: Bearer $bearer_token" \
+  -H "Content-Type: application/json")
+
+echo "CloudWorks Flow triggered."
+echo "$trigger_response"
