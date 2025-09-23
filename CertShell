@@ -31,12 +31,76 @@ echo "CloudWorks Flow triggered."
 echo "$trigger_response"
 
 
-
-
-
-
-KeyStorePath=""
-KeyFile=""
+#!/bin/sh
+set +x
+#  Program : Open_Position_DHtoSpoke_details.sh
+#  Owner   : CVS Anaplan Admin
+#  Date    : 09-Aug-2023
+#  Purpose : Import Open Position details from Headcount Data Hub to Headcount Spoke Model.
+#______________Security Configuration______________
+ 
+#___________The certificates for this script were created for the '' account and will be used once the certificate has been created______
+ 
+KeyStorePath="/S4Drop/anaplan/ssl_cert/anaplan_admin_test@cvshealth.com.jks"
+KeyFile="/S4Drop/anaplan/ssl_cert/anaplan_admin_test.keystore"
 KeyStoreAlias=`cat $KeyFile | cut -f1 -d "|"`
 KeyStorePass=`cat $KeyFile | cut -f2 -d "|"`
 Credentials="-keystore ${KeyStorePath} -keystorepass ${KeyStorePass} -keystorealias ${KeyStoreAlias}"
+ 
+#____________The username and password below are being used for testing purposes._____________
+#AnaplanUserEmail="ANAPLAN_ADMIN_TEST@cvshealth.com"
+#AnaplanUserPwd=""
+#User="${AnaplanUserEmail}:${AnaplanUserPwd}"
+#Credentials="-user ${User}"
+ 
+#______Url Authentication_____________
+ 
+ServiceUrl="https://api.anaplan.com"
+AuthUrl="https://auth.anaplan.com"
+ 
+#______________Workspace/Model Configuration______________
+ 
+parmName="HeadcountSpokeModelConnectionID"
+parmFile="/S4Drop/anaplan/scripts/uat/config/anaplan_parameters.cfg"
+inParm=`grep $parmName $parmFile`
+ 
+WorkspaceId=`echo $inParm | cut -f2 -d"|"`
+ModelId=`echo $inParm | cut -f3 -d"|"`
+ 
+#______________Action Configuration______________
+ 
+InboundDir="/S4Drop/anaplan/inbound/Wrkfrc/WD"
+ProcessId="A09. Load Open Position Details from Headcount DH"
+timestamp=$(date +"%Y%m%d_%H%M%S")
+ErrorFile="HC_Planning_OpenRoles_Error.csv"
+Errorlog="${InboundDir}/Error/${ErrorFile}"
+LogPath="/S4Drop/anaplan/scripts/uat/log"
+LogFile="${LogPath}/Open_Positions_DHtoSpoke_Log.txt"
+ 
+echo "Program begin at" $timestamp > $LogFile
+ 
+#______________Anaplan Connect Configuration______________
+ 
+ChunkSize="1"
+Operation="-maxretrycount 15 -httptimeout 60 -retrytimeout 60 -debug -service ${ServiceUrl} -auth ${AuthUrl} -workspace ${WorkspaceId} -model ${ModelId} -process '${ProcessId}' -execute -output '${Errorlog}'"
+ 
+ 
+#____________________________ Do not edit below this line ______________________________
+ 
+Command="/S4Drop/anaplan/api_connect/AnaplanClient.sh ${Credentials} ${Operation}"
+ 
+/bin/sh -c "${Command}" >> $LogFile
+ 
+echo "Program exiting normally" >> $LogFile
+ 
+#_______________Email Notification______________
+ 
+MailID=ANAPLAN_ADMIN_TEST@CVSHealth.com
+ 
+echo "Program Open_Position_DHtoSpoke_details.sh completed" | mail -s "Anaplan job update - Open_Position_DHtoSpoke_details.sh" -a $LogFile -r Anaplan_support@cvshealth.com $MailID
+ 
+exit 0
+
+
+
+
