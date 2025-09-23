@@ -29,3 +29,14 @@ trigger_response=$(curl -s -X POST "https://api.anaplan.com/cloudworks/v2/integr
 
 echo "CloudWorks Flow triggered."
 echo "$trigger_response"
+
+
+
+
+
+
+KeyStorePath=""
+KeyFile=""
+KeyStoreAlias=`cat $KeyFile | cut -f1 -d "|"`
+KeyStorePass=`cat $KeyFile | cut -f2 -d "|"`
+Credentials="-keystore ${KeyStorePath} -keystorepass ${KeyStorePass} -keystorealias ${KeyStoreAlias}"
